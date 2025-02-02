@@ -12,8 +12,8 @@ import (
 )
 
 var (
-	lib       map[string]func(args []string)
-	pathalias map[string]string
+	lib     map[string]func(args []string)
+	aliases map[string]string
 )
 
 func init() {
@@ -26,9 +26,10 @@ func init() {
 		"cls":   clear,
 		"clear": clear,
 		"cat":   cat,
+		"help":  help,
 	}
 
-	pathalias = map[string]string{
+	aliases = map[string]string{
 		"~": os.Getenv("HOME"),
 	}
 }
@@ -49,8 +50,8 @@ func main() {
 			continue
 		}
 
-		op := strings.Split(command, " ")[0]
-		args := strings.Split(command, " ")[1:]
+		op := strings.Fields(command)[0]
+		args := strings.Fields(command)[1:]
 
 		if cmd, exists := lib[op]; exists {
 			cmd(args)
@@ -149,7 +150,7 @@ func clear(args []string) {
 }
 
 func replacePath(path string) string {
-	for alias, origin := range pathalias {
+	for alias, origin := range aliases {
 		path = strings.Replace(path, alias, origin, 1)
 	}
 	return path
@@ -175,4 +176,13 @@ func cat(args []string) {
 		res += " "
 	}
 	fmt.Println(res)
+}
+
+func help(args []string) {
+	if args[0] == "-a" {
+		for command := range lib {
+			fmt.Println(command)
+		}
+	}
+	return
 }
