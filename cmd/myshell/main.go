@@ -25,7 +25,6 @@ func init() {
 		"cd":    cd,
 		"cls":   clear,
 		"clear": clear,
-		"cat":   cat,
 	}
 
 	aliases = map[string]string{
@@ -198,19 +197,4 @@ func cd(args []string) {
 	if err != nil {
 		fmt.Printf("cd: %v: No such file or directory\n", args[0])
 	}
-}
-
-func cat(args []string) {
-	var res string
-	for _, arg := range args {
-		arg = strings.ReplaceAll(arg, "'", "")
-		buf, err := os.ReadFile(replacePath(arg))
-		if err != nil {
-			fmt.Printf("cat: %v: No such file\n", arg)
-			return
-		}
-		res += string(buf)
-	}
-	fmt.Println(res)
-	return
 }
