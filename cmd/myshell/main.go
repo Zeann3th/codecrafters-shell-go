@@ -8,15 +8,20 @@ import (
 	"strings"
 )
 
-// Ensures gofmt doesn't remove the "fmt" import in stage 1 (feel free to remove this!)
-var _ = fmt.Fprint
+var lib map[string]func(args []string)
+
+func init() {
+	lib = map[string]func(args []string){
+		"exit": exit,
+		"echo": echo,
+		"type": _type,
+	}
+}
 
 func main() {
 	for {
-		// Uncomment this block to pass the first stage
 		fmt.Fprint(os.Stdout, "$ ")
 
-		// Wait for user input
 		command, err := bufio.NewReader(os.Stdin).ReadString('\n')
 		if err != nil {
 			fmt.Print(fmt.Errorf("Error: %v", err))
@@ -24,23 +29,49 @@ func main() {
 		}
 
 		command = strings.TrimSpace(command)
+		op := strings.Split(command, " ")[0]
+		args := strings.Split(command, " ")[1:]
 
-		if strings.HasPrefix(command, "exit") {
-			args := strings.Split(command, " ")[1:]
-			code, err := strconv.Atoi(args[0])
-			if err != nil {
-				fmt.Print(fmt.Errorf("Error: %v", err))
-			}
-			os.Exit(code)
-		} else if strings.HasPrefix(command, "echo") {
-			args := strings.Split(command, " ")[1:]
-			msg := make([]interface{}, len(args))
-			for i, v := range args {
-				msg[i] = v
-			}
-			fmt.Println(msg...)
+		if cmd, exists := lib[op]; exists {
+			cmd(args)
 		} else {
 			fmt.Println(command + ": command not found")
+		}
+	}
+}
+
+func exit(args []string) {
+	if len(args) > 1 {
+		fmt.Println("Error: Expected [0: 1] argument, received " + strconv.Itoa(len(args)))
+		return
+	} else if len(args) == 0 {
+		os.Exit(0)
+	} else {
+		code, err := strconv.Atoi(args[0])
+		if err != nil {
+			fmt.Println(fmt.Errorf("Error: %v", err))
+			return
+		}
+		os.Exit(code)
+	}
+}
+
+func echo(args []string) {
+	fmt.Println(strings.Join(args, " "))
+	return
+}
+
+func _type(args []string) {
+	if len(args) != 1 {
+		fmt.Println("Error: Expected 1 argument, received " + strconv.Itoa(len(args)))
+		return
+	} else {
+		if _, exists := lib[args[0]]; exists {
+			fmt.Println(args[0] + " is a shell builtin")
+			return
+		} else {
+			fmt.Println(args[0] + ": not found")
+			return
 		}
 	}
 }
