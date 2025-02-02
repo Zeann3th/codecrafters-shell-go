@@ -32,6 +32,13 @@ func main() {
 				fmt.Print(fmt.Errorf("Error: %v", err))
 			}
 			os.Exit(code)
+		} else if strings.HasPrefix(command, "echo") {
+			args := strings.Split(command, " ")[1:]
+			msg := make([]interface{}, len(args))
+			for i, v := range args {
+				msg[i] = v
+			}
+			fmt.Println(msg...)
 		} else {
 			fmt.Println(command + ": command not found")
 		}
