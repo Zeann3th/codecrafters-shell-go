@@ -68,50 +68,62 @@ func main() {
 func parseCommand(command string) (string, []string) {
 	var args []string
 	var current strings.Builder
-	inQuote := false
+	var singleQuote, doubleQuote, backslash bool
 	isFirst := true
 	var op string
-	var quoteChar rune
 
-	for i := 0; i < len(command); i++ {
-		c := rune(command[i])
+	for _, c := range command {
 		switch c {
-		case '\'', '"':
-			if !inQuote {
-				inQuote = true
-				quoteChar = c
-			} else if c == quoteChar {
-				inQuote = false
-			} else {
-				current.WriteRune(c)
-			}
-		case ' ':
-			if !inQuote {
-				if current.Len() > 0 {
-					if isFirst {
-						op = current.String()
-						isFirst = false
-					} else {
-						args = append(args, current.String())
-					}
-					current.Reset()
-				}
-			} else {
-				current.WriteRune(c)
-			}
-		case '\\':
-			if i+1 < len(command) {
-				if inQuote {
-					current.WriteRune('\\')
-				} else {
-					current.WriteRune(rune(command[i+1]))
-					i++
-				}
-			} else {
+		case '\'':
+			if backslash && doubleQuote {
 				current.WriteRune('\\')
 			}
+			if backslash || doubleQuote {
+				current.WriteRune(c)
+			} else {
+				singleQuote = !singleQuote
+			}
+			backslash = false
+
+		case '"':
+			if backslash || singleQuote {
+				current.WriteRune(c)
+			} else {
+				doubleQuote = !doubleQuote
+			}
+			backslash = false
+
+		case '\\':
+			if backslash || singleQuote {
+				current.WriteRune(c)
+				backslash = false
+			} else {
+				backslash = true
+			}
+
+		case ' ':
+			if backslash && doubleQuote {
+				current.WriteRune('\\')
+			}
+			if backslash || singleQuote || doubleQuote {
+				current.WriteRune(c)
+			} else if current.Len() > 0 {
+				if isFirst {
+					op = current.String()
+					isFirst = false
+				} else {
+					args = append(args, current.String())
+				}
+				current.Reset()
+			}
+			backslash = false
+
 		default:
+			if doubleQuote && backslash {
+				current.WriteRune('\\')
+			}
 			current.WriteRune(c)
+			backslash = false
 		}
 	}
 
@@ -122,6 +134,7 @@ func parseCommand(command string) (string, []string) {
 			args = append(args, current.String())
 		}
 	}
+
 	return op, args
 }
 
