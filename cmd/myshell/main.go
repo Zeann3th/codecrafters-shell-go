@@ -26,7 +26,6 @@ func init() {
 		"cls":   clear,
 		"clear": clear,
 		"cat":   cat,
-		"help":  help,
 	}
 
 	aliases = map[string]string{
@@ -36,7 +35,7 @@ func init() {
 
 func main() {
 	for {
-		fmt.Fprint(os.Stdout, "$ ")
+		fmt.Printf("$ ")
 
 		command, err := bufio.NewReader(os.Stdin).ReadString('\n')
 		if err != nil {
@@ -50,8 +49,7 @@ func main() {
 			continue
 		}
 
-		op := strings.Fields(command)[0]
-		args := strings.Fields(command)[1:]
+		op, args := parseCommand(command)
 
 		if cmd, exists := lib[op]; exists {
 			cmd(args)
@@ -66,6 +64,48 @@ func main() {
 			}
 		}
 	}
+}
+
+func parseCommand(command string) (string, []string) {
+	var args []string
+	var current strings.Builder
+	inQuote := false
+	isFirst := true
+	var op string
+
+	for i := 0; i < len(command); i++ {
+		switch command[i] {
+		case '\'':
+			inQuote = !inQuote
+		case ' ':
+			if !inQuote {
+				if current.Len() > 0 {
+					if isFirst {
+						op = current.String()
+						isFirst = false
+					} else {
+						args = append(args, current.String())
+					}
+					current.Reset()
+				}
+			} else {
+				current.WriteByte(command[i])
+			}
+		default:
+			current.WriteByte(command[i])
+		}
+	}
+
+	// Handle the last argument
+	if current.Len() > 0 {
+		if isFirst {
+			op = current.String()
+		} else {
+			args = append(args, current.String())
+		}
+	}
+
+	return op, args
 }
 
 func exit(args []string) {
@@ -85,9 +125,6 @@ func exit(args []string) {
 }
 
 func echo(args []string) {
-	for i := range args {
-		args[i] = strings.ReplaceAll(args[i], "'", "")
-	}
 	fmt.Println(strings.Join(args, " "))
 	return
 }
@@ -176,13 +213,4 @@ func cat(args []string) {
 		res += " "
 	}
 	fmt.Println(res)
-}
-
-func help(args []string) {
-	if args[0] == "-a" {
-		for command := range lib {
-			fmt.Println(command)
-		}
-	}
-	return
 }
