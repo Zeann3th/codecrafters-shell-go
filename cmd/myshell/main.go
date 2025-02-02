@@ -210,7 +210,6 @@ func cat(args []string) {
 			return
 		}
 		res += string(buf)
-		res += " "
 	}
 	fmt.Println(res)
 }
