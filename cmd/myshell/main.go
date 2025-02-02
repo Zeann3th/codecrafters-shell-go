@@ -36,6 +36,8 @@ func main() {
 
 		if cmd, exists := lib[op]; exists {
 			cmd(args)
+		} else if _, exists := find(op); exists {
+			exec(op, args)
 		} else {
 			fmt.Println(command + ": command not found")
 		}
@@ -72,38 +74,33 @@ func _type(args []string) {
 			fmt.Println(args[0] + " is a shell builtin")
 			return
 		} else {
-			paths := strings.Split(os.Getenv("PATH"), ":")
-			for _, path := range paths {
-				if fp, exists := find(path, args[0]); exists {
-					fmt.Println(args[0] + " is " + fp)
-					return
-				}
+			if fp, exists := find(args[0]); exists {
+				fmt.Println(args[0] + " is " + fp)
+				return
 			}
-			fmt.Println(args[0] + ": not found")
-			return
 		}
+		fmt.Println(args[0] + ": not found")
+		return
 	}
 }
 
 func exec(op string, args []string) {
-	paths := strings.Split(os.Getenv("PATH"), ":")
-	for _, path := range paths {
-		if _, exists := find(path, op); exists {
-			fmt.Println("Program was passed " + strconv.Itoa(len(args)+1) + " args (including program name)")
-			fmt.Println("Arg #0 (program name): " + op)
-			for i, arg := range args {
-				fmt.Printf("Arg #%d: %v\n", i, arg)
-			}
-			fmt.Println(time.Now().UnixNano())
-			return
-		}
+	fmt.Println("Program was passed " + strconv.Itoa(len(args)+1) + " args (including program name)")
+	fmt.Println("Arg #0 (program name): " + op)
+	for i, arg := range args {
+		fmt.Printf("Arg #%d: %v\n", i, arg)
 	}
+	fmt.Println(time.Now().UnixNano())
+	return
 }
 
-func find(path string, ext string) (string, bool) {
-	fp := filepath.Join(path, ext)
-	if _, err := os.Stat(fp); err == nil {
-		return fp, true
+func find(exe string) (string, bool) {
+	paths := strings.Split(os.Getenv("PATH"), ":")
+	for _, path := range paths {
+		fp := filepath.Join(path, exe)
+		if _, err := os.Stat(fp); err == nil {
+			return fp, true
+		}
 	}
-	return "", false
+	return "NOENT", false
 }
