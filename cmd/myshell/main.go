@@ -212,4 +212,5 @@ func cat(args []string) {
 		res += string(buf)
 	}
 	fmt.Println(res)
+	return
 }
