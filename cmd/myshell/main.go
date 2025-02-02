@@ -6,6 +6,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strconv"
 	"strings"
 )
@@ -14,9 +15,12 @@ var lib map[string]func(args []string)
 
 func init() {
 	lib = map[string]func(args []string){
-		"exit": exit,
-		"echo": echo,
-		"type": _type,
+		"exit":  exit,
+		"echo":  echo,
+		"type":  _type,
+		"pwd":   pwd,
+		"cls":   clear,
+		"clear": clear,
 	}
 }
 
@@ -31,6 +35,11 @@ func main() {
 		}
 
 		command = strings.TrimSpace(command)
+
+		if command == "" {
+			continue
+		}
+
 		op := strings.Split(command, " ")[0]
 		args := strings.Split(command, " ")[1:]
 
@@ -98,4 +107,31 @@ func find(exe string) (string, bool) {
 		}
 	}
 	return "NOENT", false
+}
+
+func pwd(args []string) {
+	path, err := os.Getwd()
+	if err != nil {
+		fmt.Printf("Error: %v\n", err)
+		return
+	}
+	fmt.Println(path)
+	return
+}
+
+func clear(args []string) {
+	_ = args
+	switch runtime.GOOS {
+	case "linux":
+		cmd := exec.Command("clear")
+		cmd.Stdout = os.Stdout
+		cmd.Run()
+	case "windows":
+		cmd := exec.Command("cmd", "/c", "cls")
+		cmd.Stdout = os.Stdout
+		cmd.Run()
+	default:
+		fmt.Println("Error: Unsopported OS")
+	}
+	return
 }
