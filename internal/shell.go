@@ -76,16 +76,23 @@ func (s *Shell) parseCommand(input string) {
 	var current_token strings.Builder
 	var singleQuote, doubleQuote, backslash bool
 	isFirst := true
+	expectRedirectTarget := false
 
 	s.stack = []Command{}
 
 	flushToken := func() {
 		if current_token.Len() > 0 {
-			if isFirst {
-				current.op = current_token.String()
+			token := current_token.String()
+			if expectRedirectTarget {
+				current.stdout = token
+				expectRedirectTarget = false
+			} else if token == ">" {
+				expectRedirectTarget = true
+			} else if isFirst {
+				current.op = token
 				isFirst = false
 			} else {
-				current.args = append(current.args, current_token.String())
+				current.args = append(current.args, token)
 			}
 			current_token.Reset()
 		}
@@ -97,6 +104,7 @@ func (s *Shell) parseCommand(input string) {
 			s.stack = append(s.stack, current)
 			current = Command{}
 			isFirst = true
+			expectRedirectTarget = false
 		}
 	}
 
@@ -124,6 +132,12 @@ func (s *Shell) parseCommand(input string) {
 		}
 
 		if !singleQuote && !doubleQuote {
+			// if c == '>' {
+			// 	flushToken()
+			// 	current_token.WriteRune(c)
+			// 	flushToken()
+			// 	continue
+			// }
 			if i < len(input)-1 && c == '&' && input[i+1] == '&' {
 				pushCommand()
 				i++
@@ -145,6 +159,57 @@ func (s *Shell) parseCommand(input string) {
 	}
 }
 
+func (s *Shell) executeExternal(cmd Command, next CommandFunc) error {
+	ext := exec.Command(cmd.op, cmd.args...)
+
+	if cmd.stdout != "" {
+		// Create parent directories if they don't exist
+		dir := filepath.Dir(cmd.stdout)
+		if err := os.MkdirAll(dir, 0755); err != nil {
+			return fmt.Errorf("Error creating directory: %v", err)
+		}
+
+		file, err := os.Create(cmd.stdout)
+		if err != nil {
+			return fmt.Errorf("Error creating output file: %v", err)
+		}
+		defer file.Close()
+		ext.Stdout = file
+	} else {
+		ext.Stdout = os.Stdout
+	}
+
+	if cmd.stderr != "" {
+		// Create parent directories if they don't exist
+		dir := filepath.Dir(cmd.stderr)
+		if err := os.MkdirAll(dir, 0755); err != nil {
+			return fmt.Errorf("Error creating directory: %v", err)
+		}
+
+		file, err := os.Create(cmd.stderr)
+		if err != nil {
+			return fmt.Errorf("Error creating error file: %v", err)
+		}
+		defer file.Close()
+		ext.Stderr = file
+	} else {
+		ext.Stderr = os.Stderr
+	}
+
+	err := ext.Run()
+	if err != nil {
+		if exitErr, ok := err.(*exec.ExitError); ok {
+			return fmt.Errorf("%s: %v", cmd.op, exitErr.Error())
+		}
+		return fmt.Errorf("%s: %v", cmd.op, err)
+	}
+
+	if next != nil {
+		return next(nil, nil)
+	}
+	return nil
+}
+
 func (s *Shell) executeCommand(cmd Command) error {
 	var nextFunc CommandFunc
 	if cmd.nextCommand != nil {
@@ -161,42 +226,6 @@ func (s *Shell) executeCommand(cmd Command) error {
 		fmt.Printf("%s: command not found\n", cmd.op)
 		return fmt.Errorf("%s: command not found\n", cmd.op)
 	}
-}
-
-func (s *Shell) executeExternal(cmd Command, next CommandFunc) error {
-	ext := exec.Command(cmd.op, cmd.args...)
-
-	if cmd.stdout != "" {
-		file, err := os.Create(cmd.stdout)
-		if err != nil {
-			return fmt.Errorf("Error creating output file: %v", err)
-		}
-		defer file.Close()
-		ext.Stdout = file
-	} else {
-		ext.Stdout = os.Stdout
-	}
-
-	if cmd.stderr != "" {
-		file, err := os.Create(cmd.stderr)
-		if err != nil {
-			return fmt.Errorf("Error creating error file: %v", err)
-		}
-		defer file.Close()
-		ext.Stderr = file
-	} else {
-		ext.Stderr = os.Stderr
-	}
-
-	err := ext.Run()
-	if err != nil {
-		return fmt.Errorf("%s: command not found", cmd.op)
-	}
-
-	if next != nil {
-		return next(nil, nil)
-	}
-	return nil
 }
 
 func (s *Shell) exit(args []string, next CommandFunc) error {
