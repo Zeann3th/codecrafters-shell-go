@@ -99,6 +99,17 @@ func parseCommand(command string) (string, []string) {
 			} else {
 				current.WriteRune(c)
 			}
+		case '\\':
+			if i+1 < len(command) {
+				if inQuote {
+					current.WriteRune('\\')
+				} else {
+					current.WriteRune(rune(command[i+1]))
+					i++
+				}
+			} else {
+				current.WriteRune('\\')
+			}
 		default:
 			current.WriteRune(c)
 		}
