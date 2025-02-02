@@ -158,7 +158,7 @@ func (s *Shell) executeCommand(cmd Command) error {
 	} else if _, exists := find(cmd.op); exists {
 		return s.executeExternal(cmd, nextFunc)
 	} else {
-		fmt.Printf("%s: command not found", cmd.op)
+		fmt.Printf("%s: command not found\n", cmd.op)
 		return fmt.Errorf("%s: command not found\n", cmd.op)
 	}
 }
