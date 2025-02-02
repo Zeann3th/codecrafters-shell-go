@@ -71,11 +71,20 @@ func parseCommand(command string) (string, []string) {
 	inQuote := false
 	isFirst := true
 	var op string
+	var quoteChar rune
 
 	for i := 0; i < len(command); i++ {
-		switch command[i] {
-		case '\'':
-			inQuote = !inQuote
+		c := rune(command[i])
+		switch c {
+		case '\'', '"':
+			if !inQuote {
+				inQuote = true
+				quoteChar = c
+			} else if c == quoteChar {
+				inQuote = false
+			} else {
+				current.WriteRune(c)
+			}
 		case ' ':
 			if !inQuote {
 				if current.Len() > 0 {
@@ -88,14 +97,13 @@ func parseCommand(command string) (string, []string) {
 					current.Reset()
 				}
 			} else {
-				current.WriteByte(command[i])
+				current.WriteRune(c)
 			}
 		default:
-			current.WriteByte(command[i])
+			current.WriteRune(c)
 		}
 	}
 
-	// Handle the last argument
 	if current.Len() > 0 {
 		if isFirst {
 			op = current.String()
@@ -103,7 +111,6 @@ func parseCommand(command string) (string, []string) {
 			args = append(args, current.String())
 		}
 	}
-
 	return op, args
 }
 
