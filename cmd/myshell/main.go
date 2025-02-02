@@ -11,7 +11,10 @@ import (
 	"strings"
 )
 
-var lib map[string]func(args []string)
+var (
+	lib       map[string]func(args []string)
+	pathalias map[string]string
+)
 
 func init() {
 	lib = map[string]func(args []string){
@@ -22,6 +25,10 @@ func init() {
 		"cd":    cd,
 		"cls":   clear,
 		"clear": clear,
+	}
+
+	pathalias = map[string]string{
+		"~": os.Getenv("HOME"),
 	}
 }
 
@@ -138,7 +145,11 @@ func clear(args []string) {
 }
 
 func cd(args []string) {
-	err := os.Chdir(args[0])
+	path := args[0]
+	if _, exists := pathalias[path]; exists {
+		path = pathalias[path]
+	}
+	err := os.Chdir(path)
 	if err != nil {
 		fmt.Printf("cd: %v: No such file or directory\n", args[0])
 	}
