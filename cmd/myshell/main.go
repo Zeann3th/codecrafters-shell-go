@@ -25,6 +25,7 @@ func init() {
 		"cd":    cd,
 		"cls":   clear,
 		"clear": clear,
+		"cat":   cat,
 	}
 
 	pathalias = map[string]string{
@@ -83,6 +84,9 @@ func exit(args []string) {
 }
 
 func echo(args []string) {
+	for i := range args {
+		args[i] = strings.ReplaceAll(args[i], "'", "")
+	}
 	fmt.Println(strings.Join(args, " "))
 	return
 }
@@ -144,13 +148,31 @@ func clear(args []string) {
 	return
 }
 
-func cd(args []string) {
-	path := args[0]
-	if _, exists := pathalias[path]; exists {
-		path = pathalias[path]
+func replacePath(path string) string {
+	for alias, origin := range pathalias {
+		path = strings.Replace(path, alias, origin, 1)
 	}
-	err := os.Chdir(path)
+	return path
+}
+
+func cd(args []string) {
+	err := os.Chdir(replacePath(args[0]))
 	if err != nil {
 		fmt.Printf("cd: %v: No such file or directory\n", args[0])
 	}
+}
+
+func cat(args []string) {
+	var res string
+	for _, arg := range args {
+		arg = strings.ReplaceAll(arg, "'", "")
+		buf, err := os.ReadFile(replacePath(arg))
+		if err != nil {
+			fmt.Printf("cat: %v: No such file\n", arg)
+			return
+		}
+		res += string(buf)
+		res += " "
+	}
+	fmt.Println(res)
 }
