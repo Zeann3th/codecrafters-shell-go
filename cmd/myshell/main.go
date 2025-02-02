@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -36,10 +37,15 @@ func main() {
 
 		if cmd, exists := lib[op]; exists {
 			cmd(args)
-		} else if _, exists := find(op); exists {
-			exec(op, args)
 		} else {
-			fmt.Println(command + ": command not found")
+			ext := exec.Command(op, args...)
+			ext.Stderr = os.Stderr
+			ext.Stdout = os.Stdout
+
+			err := ext.Run()
+			if err != nil {
+				fmt.Println(command + ": command not found")
+			}
 		}
 	}
 }
@@ -82,16 +88,6 @@ func _type(args []string) {
 		fmt.Println(args[0] + ": not found")
 		return
 	}
-}
-
-func exec(op string, args []string) {
-	fmt.Println("Program was passed " + strconv.Itoa(len(args)+1) + " args (including program name).")
-	fmt.Println("Arg #0 (program name): " + op)
-	for i, arg := range args {
-		fmt.Printf("Arg #%d: %v\n", i+1, arg)
-	}
-	fmt.Printf("Program Signature: %v\n", time.Now().UnixMilli())
-	return
 }
 
 func find(exe string) (string, bool) {
