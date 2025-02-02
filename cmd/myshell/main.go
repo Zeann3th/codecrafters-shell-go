@@ -90,7 +90,7 @@ func exec(op string, args []string) {
 	for i, arg := range args {
 		fmt.Printf("Arg #%d: %v\n", i+1, arg)
 	}
-	fmt.Println(time.Now().UnixNano())
+	fmt.Printf("Program Signature: %v\n", time.Now().UnixMilli())
 	return
 }
 
