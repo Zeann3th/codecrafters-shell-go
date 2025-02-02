@@ -140,6 +140,6 @@ func clear(args []string) {
 func cd(args []string) {
 	err := os.Chdir(args[0])
 	if err != nil {
-		fmt.Printf("cd %v: No such file or directory\n", args[0])
+		fmt.Printf("cd: %v: No such file or directory\n", args[0])
 	}
 }
