@@ -88,7 +88,7 @@ func exec(op string, args []string) {
 	fmt.Println("Program was passed " + strconv.Itoa(len(args)+1) + " args (including program name).")
 	fmt.Println("Arg #0 (program name): " + op)
 	for i, arg := range args {
-		fmt.Printf("Arg #%d: %v\n", i, arg)
+		fmt.Printf("Arg #%d: %v\n", i+1, arg)
 	}
 	fmt.Println(time.Now().UnixNano())
 	return
