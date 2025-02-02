@@ -19,6 +19,7 @@ func init() {
 		"echo":  echo,
 		"type":  _type,
 		"pwd":   pwd,
+		"cd":    cd,
 		"cls":   clear,
 		"clear": clear,
 	}
@@ -134,4 +135,11 @@ func clear(args []string) {
 		fmt.Println("Error: Unsopported OS")
 	}
 	return
+}
+
+func cd(args []string) {
+	err := os.Chdir(args[0])
+	if err != nil {
+		fmt.Printf("cd /%v: No such file or directory", args[0])
+	}
 }
