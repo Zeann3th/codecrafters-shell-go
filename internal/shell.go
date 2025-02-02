@@ -124,22 +124,7 @@ func (s *Shell) parseCommand(input string) {
 		}
 
 		if !singleQuote && !doubleQuote {
-			// Handle special operators
-			if c == '>' {
-				flushToken()
-				// Check for 2> or 1>
-				if i > 0 && (input[i-1] == '2' || input[i-1] == '1') {
-					if input[i-1] == '2' {
-						current.stderr = strings.TrimSpace(input[i+1:])
-					} else {
-						current.stdout = strings.TrimSpace(input[i+1:])
-					}
-				} else {
-					current.stdout = strings.TrimSpace(input[i+1:])
-				}
-				pushCommand()
-				break
-			} else if i < len(input)-1 && c == '&' && input[i+1] == '&' {
+			if i < len(input)-1 && c == '&' && input[i+1] == '&' {
 				pushCommand()
 				i++
 				continue
@@ -170,8 +155,11 @@ func (s *Shell) executeCommand(cmd Command) error {
 
 	if shellCmd, exists := s.commands[cmd.op]; exists {
 		return shellCmd(cmd.args, nextFunc)
-	} else {
+	} else if _, exists := find(cmd.op); exists {
 		return s.executeExternal(cmd, nextFunc)
+	} else {
+		fmt.Printf("%s: command not found", cmd.op)
+		return fmt.Errorf("%s: command not found\n", cmd.op)
 	}
 }
 
@@ -226,8 +214,39 @@ func (s *Shell) exit(args []string, next CommandFunc) error {
 	return nil
 }
 
+func (s *Shell) pipe(arg string) (*os.File, error) {
+	var writer *os.File = os.Stdout
+	if arg != "" {
+		file, err := os.Create(arg)
+		if err != nil {
+			return nil, fmt.Errorf("Error creating output file: %v", err)
+		}
+		writer = file
+	}
+	return writer, nil
+}
+
 func (s *Shell) echo(args []string, next CommandFunc) error {
-	fmt.Println(strings.Join(args, " "))
+	var output strings.Builder
+	var redirectionFile string
+
+	for i := 0; i < len(args); i++ {
+		if strings.HasPrefix(args[i], ">") || strings.HasPrefix(args[i], "1>") || strings.HasPrefix(args[i], "2>") {
+			redirectionFile = strings.TrimSpace(args[i+1])
+			args = args[:i]
+			break
+		}
+	}
+
+	output.WriteString(strings.Join(args, " "))
+
+	writer, err := s.pipe(redirectionFile)
+	if err != nil {
+		return err
+	}
+
+	fmt.Fprintln(writer, output.String())
+
 	if next != nil {
 		return next(nil, nil)
 	}
