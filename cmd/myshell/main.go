@@ -21,6 +21,11 @@ func main() {
 			os.Exit(1)
 		}
 
-		fmt.Println(command[:len(command)-1] + ": command not found")
+		switch parsed := command[:len(command)-1]; parsed {
+		case "exit":
+			os.Exit(0)
+		default:
+			fmt.Println(command[:len(command)-1] + ": command not found")
+		}
 	}
 }
