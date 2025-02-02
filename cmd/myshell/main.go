@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"time"
 )
 
 var lib map[string]func(args []string)
@@ -73,8 +74,7 @@ func _type(args []string) {
 		} else {
 			paths := strings.Split(os.Getenv("PATH"), ":")
 			for _, path := range paths {
-				fp := filepath.Join(path, args[0])
-				if _, err := os.Stat(fp); err == nil {
+				if fp, exists := find(path, args[0]); exists {
 					fmt.Println(args[0] + " is " + fp)
 					return
 				}
@@ -83,4 +83,27 @@ func _type(args []string) {
 			return
 		}
 	}
+}
+
+func exec(op string, args []string) {
+	paths := strings.Split(os.Getenv("PATH"), ":")
+	for _, path := range paths {
+		if _, exists := find(path, op); exists {
+			fmt.Println("Program was passed " + strconv.Itoa(len(args)+1) + " args (including program name)")
+			fmt.Println("Arg #0 (program name): " + op)
+			for i, arg := range args {
+				fmt.Printf("Arg #%d: %v\n", i, arg)
+			}
+			fmt.Println(time.Now().UnixNano())
+			return
+		}
+	}
+}
+
+func find(path string, ext string) (string, bool) {
+	fp := filepath.Join(path, ext)
+	if _, err := os.Stat(fp); err == nil {
+		return fp, true
+	}
+	return "", false
 }
