@@ -35,7 +35,7 @@ func init() {
 
 func main() {
 	for {
-		fmt.Printf("$ ")
+		fmt.Fprint(os.Stdout, "$ ")
 
 		command, err := bufio.NewReader(os.Stdin).ReadString('\n')
 		if err != nil {
