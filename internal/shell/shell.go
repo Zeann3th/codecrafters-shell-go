@@ -77,7 +77,7 @@ func (s *Shell) Run() {
 			case 9: // Tab
 				completed := s.TabComplete(input.String())
 				if completed != input.String() {
-					fmt.Print("\r\033[K$ " + completed)
+					fmt.Print("\r\033[K$ " + completed + " ")
 					input.Reset()
 					input.WriteString(completed)
 				}
