@@ -1,7 +1,6 @@
 package shell
 
 import (
-	"bufio"
 	"fmt"
 	"os"
 	"os/exec"
@@ -11,8 +10,10 @@ import (
 	"strings"
 
 	debuggger "github.com/codecrafters-io/shell-starter-go/internal/debugger"
+	"golang.org/x/term"
 )
 
+// ** Structs **
 // ------------------------------------------------------------------------------------------
 
 type CommandFunc func(args []string, next CommandFunc) error
@@ -32,6 +33,11 @@ type Command struct {
 	nextCommand *Command
 }
 
+type TerminalState struct {
+	oldState *term.State
+}
+
+// ** Essentials **
 // ------------------------------------------------------------------------------------------
 
 // Creates new Shell instance.
@@ -44,7 +50,82 @@ func NewShell() *Shell {
 		aliases:  map[string]string{"~": os.Getenv("HOME")},
 	}
 	s.initCommands()
+	// s.debug.Enable()
 	return s
+}
+
+func (s *Shell) Run() {
+	termState, err := s.setupTerminal()
+	if err != nil {
+		fmt.Printf("Error setting up terminal: %v\n", err)
+		return
+	}
+	defer s.restoreTerminal(termState)
+
+	var input strings.Builder
+	for {
+		fmt.Fprint(os.Stdout, "$ ")
+
+		var buf [1]byte
+		for {
+			n, err := os.Stdin.Read(buf[:])
+			if err != nil || n == 0 {
+				continue
+			}
+
+			switch buf[0] {
+			case 9: // Tab
+				completed := s.TabComplete(input.String())
+				if completed != input.String() {
+					fmt.Print("\r\033[K$ " + completed)
+					input.Reset()
+					input.WriteString(completed)
+				}
+
+			case 13: // Enter
+				fmt.Println()
+				command := strings.TrimSpace(input.String())
+				if command != "" {
+					s.parseCommand(command)
+					if len(s.stack) > 0 {
+						s.executeCommand(s.stack[0])
+						s.stack = []Command{}
+					}
+				}
+				input.Reset()
+				break
+
+			case 127, 8: // Backspace (Unix) or Backspace (Windows)
+				if input.Len() > 0 {
+					str := input.String()
+					input.Reset()
+					input.WriteString(str[:len(str)-1])
+					fmt.Print("\b \b")
+				}
+
+			case 3: // Ctrl+C
+				fmt.Println("\n^C")
+				input.Reset()
+				break
+
+			case 4: // Ctrl+D
+				if input.Len() == 0 {
+					fmt.Println("exit")
+					os.Exit(0)
+				}
+
+			default:
+				if buf[0] >= 32 { // Only print printable characters
+					input.WriteByte(buf[0])
+					fmt.Print(string(buf[0]))
+				}
+			}
+
+			if buf[0] == 13 { // Enter was pressed
+				break
+			}
+		}
+	}
 }
 
 // Shell builtin command map
@@ -58,32 +139,6 @@ func (s *Shell) initCommands() {
 	s.commands["clear"] = s.clear
 }
 
-// Shell REPL (Read Eval Print Loop)
-// Waits for user input and place commands on stack if having multiple stages
-func (s *Shell) Run() {
-	for {
-		fmt.Fprint(os.Stdout, "$ ")
-
-		command, err := bufio.NewReader(os.Stdin).ReadString('\n')
-		if err != nil {
-			fmt.Print(fmt.Errorf("Error: %v", err))
-			os.Exit(1)
-		}
-
-		command = strings.TrimSpace(command)
-		if command == "" {
-			continue
-		}
-
-		s.parseCommand(command)
-		if len(s.stack) > 0 {
-			s.executeCommand(s.stack[0])
-			// Clear stack after execution
-			s.stack = []Command{}
-		}
-	}
-}
-
 // Shell command parser, parses command into op (operation) and args (arguments for the operation).
 // Supports > and &&
 func (s *Shell) parseCommand(input string) {
@@ -91,19 +146,13 @@ func (s *Shell) parseCommand(input string) {
 	var current_token strings.Builder
 	var singleQuote, doubleQuote, backslash bool
 	isFirst := true
-	expectRedirectTarget := false
 
 	s.stack = []Command{}
 
 	flushToken := func() {
 		if current_token.Len() > 0 {
 			token := current_token.String()
-			if expectRedirectTarget {
-				current.stdout = token
-				expectRedirectTarget = false
-			} else if token == ">" {
-				expectRedirectTarget = true
-			} else if isFirst {
+			if isFirst {
 				current.op = token
 				isFirst = false
 			} else {
@@ -119,7 +168,6 @@ func (s *Shell) parseCommand(input string) {
 			s.stack = append(s.stack, current)
 			current = Command{}
 			isFirst = true
-			expectRedirectTarget = false
 		}
 	}
 
@@ -147,12 +195,11 @@ func (s *Shell) parseCommand(input string) {
 		}
 
 		if !singleQuote && !doubleQuote {
-			// if c == '>' {
-			// 	flushToken()
-			// 	current_token.WriteRune(c)
-			// 	flushToken()
-			// 	continue
-			// }
+			if c == '>' {
+				flushToken()
+				current.args = append(current.args, ">")
+				continue
+			}
 			if i < len(input)-1 && c == '&' && input[i+1] == '&' {
 				pushCommand()
 				i++
@@ -174,36 +221,6 @@ func (s *Shell) parseCommand(input string) {
 	}
 }
 
-// Shell external command execution, work in-progress
-// TODO: Needs to pipe to  file and not write out to the console if there is '>', '1>', '2>'
-func (s *Shell) executeExternal(cmd Command, next CommandFunc) error {
-	s.debug.Log(cmd.op, cmd.args)
-	ext := exec.Command(cmd.op, cmd.args...)
-	writer, err := s.pipe(&cmd.args)
-	s.debug.Log("Writer: ", debuggger.GetWriterType(writer))
-	if err != nil {
-		return err
-	}
-	if writer != os.Stdout {
-		defer writer.Close()
-	}
-
-	ext.Stderr = os.Stderr
-	ext.Args = append([]string{cmd.op}, cmd.args...)
-
-	out, err := ext.Output()
-	if err != nil {
-		return fmt.Errorf("%s: %v", cmd.op, err)
-	}
-
-	fmt.Fprintln(writer, string(out))
-
-	if next != nil {
-		return next(nil, nil)
-	}
-	return nil
-}
-
 // Shell generic command execution, contains logic to whether execute builtin or external commands, prints out error if not found
 func (s *Shell) executeCommand(cmd Command) error {
 	var nextFunc CommandFunc
@@ -213,6 +230,7 @@ func (s *Shell) executeCommand(cmd Command) error {
 		}
 	}
 
+	s.debug.Log(cmd.op, cmd.args)
 	if shellCmd, exists := s.commands[cmd.op]; exists {
 		return shellCmd(cmd.args, nextFunc)
 	} else if _, exists := find(cmd.op); exists {
@@ -223,6 +241,100 @@ func (s *Shell) executeCommand(cmd Command) error {
 	}
 }
 
+// Shell external command execution, work in-progress
+// TODO: Needs to pipe to  file and not write out to the console if there is '>', '1>', '2>'
+func (s *Shell) executeExternal(cmd Command, next CommandFunc) error {
+	ext := exec.Command(cmd.op, cmd.args...)
+	writer, err := s.pipe(&cmd.args)
+	if err != nil {
+		return err
+	}
+	if writer != os.Stdout {
+		defer writer.Close()
+	}
+
+	ext.Stdout = writer
+
+	err = ext.Run()
+	if err != nil {
+		return fmt.Errorf("%s: %v", cmd.op, err)
+	}
+
+	if next != nil {
+		return next(nil, nil)
+	}
+	return nil
+}
+
+// ** Term **
+// ------------------------------------------------------------------------------------------
+
+func (s *Shell) setupTerminal() (*TerminalState, error) {
+	if runtime.GOOS == "windows" {
+		oldState, err := term.MakeRaw(int(os.Stdin.Fd()))
+		if err != nil {
+			return nil, err
+		}
+		return &TerminalState{oldState: oldState}, nil
+	}
+
+	oldState, err := term.MakeRaw(int(os.Stdin.Fd()))
+	if err != nil {
+		return nil, err
+	}
+	return &TerminalState{oldState: oldState}, nil
+}
+
+func (s *Shell) restoreTerminal(ts *TerminalState) {
+	if ts != nil && ts.oldState != nil {
+		term.Restore(int(os.Stdin.Fd()), ts.oldState)
+	}
+}
+
+func (s *Shell) TabComplete(input string) string {
+	if input == "" {
+		return input
+	}
+
+	words := strings.Fields(input)
+	if len(words) == 0 {
+		return input
+	}
+
+	if len(words) == 1 && !strings.Contains(input, " ") {
+		return s.completeCommand(words[0])
+	}
+
+	return s.completePath(input)
+}
+
+func (s *Shell) completeCommand(partial string) string {
+	matches := []string{}
+
+	// Check built-in commands
+	for cmd := range s.commands {
+		if strings.HasPrefix(cmd, partial) {
+			matches = append(matches, cmd)
+		}
+	}
+
+	// Check executables in PATH
+	if path, exists := find(partial); exists {
+		matches = append(matches, filepath.Base(path))
+	}
+
+	if len(matches) == 0 {
+		return partial
+	}
+
+	if len(matches) == 1 {
+		return matches[0]
+	}
+
+	return s.findCommonPrefix(matches)
+}
+
+// ** Builtins **
 // ------------------------------------------------------------------------------------------
 
 // Shell builtin exit
@@ -309,18 +421,6 @@ func (s *Shell) _type(args []string, next CommandFunc) error {
 	return nil
 }
 
-// Shell executable finder
-func find(exe string) (string, bool) {
-	paths := strings.Split(os.Getenv("PATH"), ":")
-	for _, path := range paths {
-		fp := filepath.Join(path, exe)
-		if _, err := os.Stat(fp); err == nil {
-			return fp, true
-		}
-	}
-	return "NOENT", false
-}
-
 // Shell builtin pwd
 func (s *Shell) pwd(args []string, next CommandFunc) error {
 	path, err := os.Getwd()
@@ -369,10 +469,81 @@ func (s *Shell) cd(args []string, next CommandFunc) error {
 	return nil
 }
 
+// ** Utils **
+// ------------------------------------------------------------------------------------------
+
 // Shell path aliases
 func (s *Shell) replacePath(path string) string {
 	for alias, origin := range s.aliases {
 		path = strings.Replace(path, alias, origin, 1)
 	}
 	return path
+}
+
+// Shell executable finder
+func find(exe string) (string, bool) {
+	paths := strings.Split(os.Getenv("PATH"), ":")
+	for _, path := range paths {
+		fp := filepath.Join(path, exe)
+		if _, err := os.Stat(fp); err == nil {
+			return fp, true
+		}
+	}
+	return "NOENT", false
+}
+
+// completePath handles file path completion
+func (s *Shell) completePath(input string) string {
+	lastSpace := strings.LastIndex(input, " ")
+	if lastSpace == -1 {
+		return input
+	}
+
+	prefix := input[:lastSpace+1]
+	partial := s.replacePath(input[lastSpace+1:])
+
+	dir := "."
+	if filepath.Dir(partial) != "." {
+		dir = filepath.Dir(partial)
+	}
+
+	pattern := filepath.Join(dir, filepath.Base(partial)+"*")
+	matches, err := filepath.Glob(pattern)
+	if err != nil || len(matches) == 0 {
+		return input
+	}
+
+	if len(matches) == 1 {
+		fi, err := os.Stat(matches[0])
+		if err != nil {
+			return input
+		}
+		if fi.IsDir() {
+			return prefix + matches[0] + string(os.PathSeparator)
+		}
+		return prefix + matches[0]
+	}
+
+	return prefix + s.findCommonPrefix(matches)
+}
+
+// findCommonPrefix finds the longest common prefix among strings
+func (s *Shell) findCommonPrefix(strs []string) string {
+	if len(strs) == 0 {
+		return ""
+	}
+	if len(strs) == 1 {
+		return strs[0]
+	}
+
+	prefix := strs[0]
+	for i := 1; i < len(strs); i++ {
+		for !strings.HasPrefix(strs[i], prefix) {
+			prefix = prefix[:len(prefix)-1]
+			if prefix == "" {
+				return ""
+			}
+		}
+	}
+	return prefix
 }

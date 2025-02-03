@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"runtime"
+	"strings"
 )
 
 type Debugger struct {
@@ -36,7 +37,8 @@ func (d *Debugger) Log(args ...interface{}) {
 	defer file.Close()
 
 	_, filename, line, _ := runtime.Caller(2)
-	location := fmt.Sprintf("[Debug]: Log in [%v:%v]:", filename, line)
+	shortened := strings.Split(filename, "/")[len(strings.Split(filename, "/"))-1]
+	location := fmt.Sprintf("[Debug]: Log in [%v:%v]:", shortened, line)
 
 	var logMessage string
 	if len(args) == 0 {
