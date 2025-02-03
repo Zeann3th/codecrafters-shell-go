@@ -1,6 +1,6 @@
 package main
 
-import shell "github.com/codecrafters-io/shell-starter-go/internal"
+import "github.com/codecrafters-io/shell-starter-go/internal/shell"
 
 func main() {
 	sh := shell.NewShell()
